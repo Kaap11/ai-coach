@@ -229,41 +229,6 @@
             color: #666;
             margin-bottom: 15px;
         }
-        .analysis-options {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .analysis-type {
-            border: 2px solid #ddd;
-            padding: 15px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-align: center;
-        }
-        .analysis-type:hover {
-            border-color: #007cba;
-        }
-        .analysis-type.selected {
-            border-color: #007cba;
-            background: #f8f9fa;
-        }
-        .analysis-type h3 {
-            margin: 0 0 8px 0;
-            color: #333;
-            font-size: 16px;
-        }
-        .analysis-type p {
-            margin: 0;
-            color: #666;
-            font-size: 13px;
-        }
-        .custom-instruction {
-            min-height: 120px;
-            display: none;
-        }
         .info-box {
             background: #e3f2fd;
             border: 1px solid #bbdefb;
@@ -340,8 +305,8 @@
                         <p>Upload audio bestand van telefoon dictafoon</p>
                     </div>
                     <div class="audio-method" id="recordMethod">
-                        <h3>🎤 Direct Feedback Inspreken</h3>
-                        <p>Spreek je feedback direct in via browser microfoon</p>
+                        <h3>🎤 Direct Gesprek Opnemen</h3>
+                        <p>Neem je gesprek direct op via browser microfoon</p>
                     </div>
                 </div>
             </div>
@@ -396,20 +361,26 @@
             
             <div class="input-group">
                 <label>Kies Feedback Type:</label>
-                <div class="analysis-options">
-                    <div class="analysis-type selected" id="recruitmentAnalysis">
-                        <h3>🎯 Recruitment Feedback</h3>
-                        <p>KAAP11 methodiek voor recruiter gesprekken (via ChatGPT)</p>
-                    </div>
-                    <div class="analysis-type" id="customAnalysis">
-                        <h3>⚙️ Custom Feedback</h3>
-                        <p>Eigen instructies (via ChatGPT)</p>
-                    </div>
+                <select id="feedbackTypeSelect">
+                    <option value="kandidaat-verleiden-en-intake">Kandidaat verleiden en intake</option>
+                    <option value="sales-en-acquisitie">Sales en acquisitie</option>
+                    <option value="vacature-intake">Vacature intake</option>
+                    <option value="grip-en-onderhandelen">Grip en onderhandelen</option>
+                    <option value="custom-url">Custom URL</option>
+                    <option value="custom-text">Custom tekst</option>
+                </select>
+            </div>
+            
+            <div class="input-group" id="customUrlGroup" style="display:none;">
+                <label>Custom URL (naar .txt bestand):</label>
+                <input type="url" id="customUrl" placeholder="https://raw.githubusercontent.com/user/repo/main/instructie.txt">
+                <div class="info-box" style="margin-top: 5px;">
+                    URL naar een plain text bestand met je feedback instructies
                 </div>
             </div>
             
-            <div class="input-group">
-                <textarea id="customInstruction" class="custom-instruction" placeholder="Beschrijf hier je eigen feedback instructies..."></textarea>
+            <div class="input-group" id="customTextGroup" style="display:none;">
+                <textarea id="customInstruction" placeholder="Beschrijf hier je eigen feedback instructies..."></textarea>
             </div>
             
             <button id="generateFeedbackBtn" class="success-btn" disabled>Genereer Feedback</button>
@@ -441,77 +412,58 @@
         // Global variables
         let audioData = null;
         let currentStep = 1;
-        let analysisType = 'recruitment';
         let audioMethod = 'upload';
         let mediaRecorder = null;
         let recordingChunks = [];
         let recordingTimer = null;
         let recordingStartTime = 0;
         
-        // Updated recruitment instruction with score-based approach
-        const recruitmentInstruction = `# Feedback Agent voor Recruiter Intakegesprekken
+        // GitHub repository configuration
+        const GITHUB_BASE_URL = 'https://raw.githubusercontent.com/kaap11/feedback-instructies/main/';
+        
+        // Feedback types with their GitHub filenames
+        const feedbackTypes = {
+            'kandidaat-verleiden-en-intake': 'kandidaat-verleiden-en-intake.txt',
+            'sales-en-acquisitie': 'sales-en-acquisitie.txt',
+            'vacature-intake': 'vacature-intake.txt',
+            'grip-en-onderhandelen': 'grip-en-onderhandelen.txt'
+        };
+        
+        // Fallback instruction (if GitHub is not accessible)
+        const fallbackInstruction = `# KAAP11 Feedback Agent
 
 ## Rol en Doel
-Je bent een feedback agent gespecialiseerd in het analyseren van kandidaat intakegesprekken van recruiters. Je taak is om constructieve feedback te geven gebaseerd op de Kaap11 training methodieken.
-
-## STAP 1: KANDIDAAT ZOEK-ACTIVITEIT SCORE (VERPLICHT)
-Begin ALTIJD met het bepalen van een zoek-activiteit score op schaal 1-10:
-
-**Score 8-10: ACTIEF ZOEKEND**
-- Expliciet zoekgedrag ("Ik ben op zoek naar...", "solliciteer momenteel")
-- Urgentie ("zo snel mogelijk", "binnen X weken beschikbaar")
-- Concrete verwachtingen (specifieke salariseisen, functiewensen)
-- Actieve engagement (veel vragen over vacature/proces)
-
-**Score 2-7: LATENTE KANDIDAAT**
-- Passieve interesse ("houd ogen open", "als er iets voorbij komt")
-- Voorwaardelijk ("alleen voor juiste aanbod")
-- Exploratie ("benieuwd naar", "hangt af van omstandigheden")
-- Geen urgentie ("heb geen haast", "zit goed waar ik nu zit")
-
-**Score 1: NIET ZOEKEND**
-- Expliciet afwijzend ("ben niet op zoek", "heel tevreden")
-- Geen interesse (korte antwoorden, weinig engagement)
-- Sterke binding ("geweldige werkgever", recente promotie)
+Je bent een KAAP11 feedback agent gespecialiseerd in het analyseren van gesprekken. Je taak is om constructieve feedback te geven volgens de KAAP11 methodieken.
 
 ## FEEDBACK STRUCTUUR
 
-### 📊 KANDIDAAT ANALYSE
-**Zoek-Activiteit Score: X/10**
-**Kandidaat Type: [ACTIEF ZOEKEND/LATENT/NIET ZOEKEND]**
-**Bewijs:** [Citaten die score ondersteunen]
-
-### 🎯 METHODIEK EVALUATIE
-Gebruik de juiste methodiek op basis van score:
-- **Score 8-10**: RedCarpet Intake methodiek
-- **Score 2-7**: W.E.R.K. model + LRD techniek
-- **Score 1**: Acquisitie benadering
+### 📊 ANALYSE
+Analyseer het gesprek systematisch op de relevante KAAP11 aspecten voor dit type gesprek.
 
 ### 📋 CONCRETE FEEDBACK
-Voor elk aspect geef:
-- Wat ging goed (met voorbeelden)
-- Wat kan beter (met concrete tips)
-- Praktische verbeteracties
+Voor elk geanalyseerd aspect:
+- **Wat ging goed** (met specifieke voorbeelden uit het gesprek)
+- **Wat kan beter** (met concrete, actionable tips)
+- **Praktische verbeteracties** (voor volgende gesprekken)
 
 ### ⭐ SAMENVATTING
-- Top 3 sterke punten
-- Top 3 verbeterpunten
-- Concrete actiepunten voor volgende gesprekken
+- **Top 3 sterke punten** uit dit gesprek
+- **Top 3 verbeterpunten** met prioriteit
+- **Concrete actiepunten** voor professionele ontwikkeling
 
-Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activiteit score..."`;
+Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback te onderbouwen.`;
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
             loadSavedKeys();
             setupEventListeners();
             selectAudioMethod('upload');
+            handleFeedbackTypeChange();
         });
         
         function loadSavedKeys() {
             const openaiKey = localStorage.getItem('openai_api_key');
-            
             if (openaiKey) document.getElementById('openaiKey').value = openaiKey;
-            
             validateInputs();
         }
         
@@ -533,9 +485,8 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
             document.getElementById('transcribeBtn').addEventListener('click', startTranscription);
             document.getElementById('generateFeedbackBtn').addEventListener('click', generateFeedback);
             
-            // Analysis type selection
-            document.getElementById('recruitmentAnalysis').addEventListener('click', () => selectAnalysisType('recruitment'));
-            document.getElementById('customAnalysis').addEventListener('click', () => selectAnalysisType('custom'));
+            // Feedback type selection
+            document.getElementById('feedbackTypeSelect').addEventListener('change', handleFeedbackTypeChange);
             
             // Control buttons
             document.getElementById('newFeedbackBtn').addEventListener('click', newFeedback);
@@ -544,6 +495,7 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
             
             // Text input validation
             document.getElementById('customInstruction').addEventListener('input', validateFeedbackGeneration);
+            document.getElementById('customUrl').addEventListener('input', validateFeedbackGeneration);
             document.getElementById('transcriptionResult').addEventListener('input', validateFeedbackGeneration);
             
             // Drag and drop for file upload
@@ -576,15 +528,71 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
         function validateInputs() {
             const openaiKey = document.getElementById('openaiKey').value;
             const hasAudio = audioData !== null;
-            
             document.getElementById('transcribeBtn').disabled = !openaiKey || !hasAudio;
         }
         
         function validateFeedbackGeneration() {
             const transcription = document.getElementById('transcriptionResult').value.trim();
-            const hasInstruction = analysisType === 'recruitment' || document.getElementById('customInstruction').value.trim();
+            const selectedType = document.getElementById('feedbackTypeSelect').value;
+            
+            let hasInstruction = false;
+            
+            if (feedbackTypes[selectedType]) {
+                hasInstruction = true;
+            } else if (selectedType === 'custom-url') {
+                hasInstruction = document.getElementById('customUrl').value.trim() !== '';
+            } else if (selectedType === 'custom-text') {
+                hasInstruction = document.getElementById('customInstruction').value.trim() !== '';
+            }
             
             document.getElementById('generateFeedbackBtn').disabled = !transcription || !hasInstruction;
+        }
+        
+        function handleFeedbackTypeChange() {
+            const selectedType = document.getElementById('feedbackTypeSelect').value;
+            
+            // Hide all custom groups
+            document.getElementById('customUrlGroup').style.display = 'none';
+            document.getElementById('customTextGroup').style.display = 'none';
+            
+            // Show appropriate input based on selection
+            if (selectedType === 'custom-url') {
+                document.getElementById('customUrlGroup').style.display = 'block';
+            } else if (selectedType === 'custom-text') {
+                document.getElementById('customTextGroup').style.display = 'block';
+                
+                // Load saved custom instruction if available
+                const savedInstruction = localStorage.getItem('custom_instruction');
+                if (savedInstruction && !document.getElementById('customInstruction').value) {
+                    document.getElementById('customInstruction').value = savedInstruction;
+                }
+            }
+            
+            validateFeedbackGeneration();
+        }
+        
+        async function loadInstructionFromUrl(url) {
+            try {
+                showStatus('Laden van instructies...', 'success', 2);
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const instruction = await response.text();
+                
+                if (!instruction.trim()) {
+                    throw new Error('Leeg bestand ontvangen');
+                }
+                
+                return instruction.trim();
+                
+            } catch (error) {
+                console.error('Error loading instruction:', error);
+                throw new Error(`Kan instructies niet laden van ${url}: ${error.message}`);
+            }
         }
         
         // File upload handlers
@@ -605,7 +613,6 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
             const files = event.dataTransfer.files;
             if (files.length > 0) {
                 const file = files[0];
-                // Simulate file input change
                 const fileInput = document.getElementById('audioFile');
                 const dataTransfer = new DataTransfer();
                 dataTransfer.items.add(file);
@@ -653,10 +660,8 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
         // Recording functions
         async function startRecording() {
             try {
-                // Request microphone access
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
-                // Initialize MediaRecorder
                 mediaRecorder = new MediaRecorder(stream);
                 recordingChunks = [];
                 
@@ -667,14 +672,11 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
                 };
                 
                 mediaRecorder.onstop = function() {
-                    // Create audio blob
                     const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' });
                     
-                    // Create file from blob
                     const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '');
                     audioData = new File([audioBlob], `opname_${timestamp}.webm`, { type: 'audio/webm' });
                     
-                    // Show audio player
                     const audioPlayer = document.getElementById('audioPlayer');
                     audioPlayer.src = URL.createObjectURL(audioBlob);
                     audioPlayer.style.display = 'block';
@@ -682,25 +684,19 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
                     const sizeInMB = (audioData.size / 1024 / 1024).toFixed(1);
                     showStatus(`Opname voltooid! (${sizeInMB}MB)`, 'success', 1);
                     
-                    // Stop all tracks
                     stream.getTracks().forEach(track => track.stop());
-                    
                     validateInputs();
                 };
                 
-                // Start recording
                 mediaRecorder.start();
                 recordingStartTime = Date.now();
                 
-                // Update UI
                 document.getElementById('startRecordBtn').disabled = true;
                 document.getElementById('startRecordBtn').classList.add('recording');
                 document.getElementById('stopRecordBtn').disabled = false;
                 document.getElementById('recordingStatus').textContent = '🔴 Opname actief...';
                 
-                // Start timer
                 recordingTimer = setInterval(updateRecordingTimer, 1000);
-                
                 showStatus('Opname gestart! Spreek nu in je microfoon.', 'success', 1);
                 
             } catch (error) {
@@ -713,13 +709,11 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
             if (mediaRecorder && mediaRecorder.state === 'recording') {
                 mediaRecorder.stop();
                 
-                // Update UI
                 document.getElementById('startRecordBtn').disabled = false;
                 document.getElementById('startRecordBtn').classList.remove('recording');
                 document.getElementById('stopRecordBtn').disabled = true;
                 document.getElementById('recordingStatus').textContent = 'Opname gestopt';
                 
-                // Stop timer
                 if (recordingTimer) {
                     clearInterval(recordingTimer);
                     recordingTimer = null;
@@ -728,16 +722,13 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
         }
         
         function clearRecording() {
-            // Stop recording if active
             if (mediaRecorder && mediaRecorder.state === 'recording') {
                 stopRecording();
             }
             
-            // Clear data
             audioData = null;
             recordingChunks = [];
             
-            // Reset UI
             document.getElementById('audioPlayer').style.display = 'none';
             document.getElementById('recordingTimer').textContent = '00:00';
             document.getElementById('recordingStatus').textContent = 'Klaar om op te nemen';
@@ -759,14 +750,12 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
             
             if (!audioData || !openaiKey) return;
             
-            // Update UI
             setButtonState('transcribeBtn', true);
             updateSteps(2);
             showProgress(1, 25);
             showStatus('Audio wordt verstuurd naar OpenAI Whisper...', 'success', 1);
             
             try {
-                // Prepare form data
                 const formData = new FormData();
                 formData.append('file', audioData);
                 formData.append('model', 'whisper-1');
@@ -774,7 +763,6 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
                 
                 showProgress(1, 50);
                 
-                // Make API call
                 const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
                     method: 'POST',
                     headers: {
@@ -796,7 +784,6 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
                     throw new Error('Geen transcriptie ontvangen van OpenAI');
                 }
                 
-                // Show results
                 document.getElementById('transcriptionResult').value = result.text;
                 document.getElementById('transcriptionSection').style.display = 'block';
                 document.getElementById('analysisSection').style.display = 'block';
@@ -804,10 +791,8 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
                 showProgress(1, 100);
                 showStatus('Transcriptie voltooid! Scroll naar beneden voor feedback generatie.', 'success', 1);
                 
-                // Save API key
                 localStorage.setItem('openai_api_key', openaiKey);
                 
-                // Auto-resize textarea
                 autoResizeTextarea(document.getElementById('transcriptionResult'));
                 validateFeedbackGeneration();
                 
@@ -826,49 +811,46 @@ Begin met: "Op basis van de transcriptie bepaal ik eerst de kandidaat zoek-activ
             }
         }
         
-        function selectAnalysisType(type) {
-            analysisType = type;
-            
-            // Update UI
-            document.getElementById('recruitmentAnalysis').classList.toggle('selected', type === 'recruitment');
-            document.getElementById('customAnalysis').classList.toggle('selected', type === 'custom');
-            
-            // Show/hide custom instruction field
-            const customField = document.getElementById('customInstruction');
-            customField.style.display = type === 'custom' ? 'block' : 'none';
-            
-            // Load saved custom instruction if needed
-            if (type === 'custom') {
-                const savedInstruction = localStorage.getItem('custom_instruction');
-                if (savedInstruction && !customField.value) {
-                    customField.value = savedInstruction;
-                }
-            }
-            
-            validateFeedbackGeneration();
-        }
-        
         async function generateFeedback() {
             const openaiKey = document.getElementById('openaiKey').value;
             const transcription = document.getElementById('transcriptionResult').value.trim();
+            const selectedType = document.getElementById('feedbackTypeSelect').value;
             
             if (!openaiKey || !transcription) return;
             
-            // Get instruction
             let instruction = '';
-            if (analysisType === 'recruitment') {
-                instruction = recruitmentInstruction;
-            } else {
-                instruction = document.getElementById('customInstruction').value.trim();
-                if (!instruction) {
-                    showStatus('Voer een custom instructie in.', 'error', 2);
-                    return;
+            
+            try {
+                if (feedbackTypes[selectedType]) {
+                    // Load from GitHub
+                    const url = GITHUB_BASE_URL + feedbackTypes[selectedType];
+                    instruction = await loadInstructionFromUrl(url);
+                    
+                } else if (selectedType === 'custom-url') {
+                    // Load from custom URL
+                    const customUrl = document.getElementById('customUrl').value.trim();
+                    if (!customUrl) {
+                        showStatus('Voer een custom URL in.', 'error', 2);
+                        return;
+                    }
+                    instruction = await loadInstructionFromUrl(customUrl);
+                    
+                } else if (selectedType === 'custom-text') {
+                    // Use custom text
+                    instruction = document.getElementById('customInstruction').value.trim();
+                    if (!instruction) {
+                        showStatus('Voer een custom instructie in.', 'error', 2);
+                        return;
+                    }
+                    localStorage.setItem('custom_instruction', instruction);
                 }
-                // Save custom instruction
-                localStorage.setItem('custom_instruction', instruction);
+                
+            } catch (error) {
+                console.error('Error loading instruction:', error);
+                showStatus(`${error.message}. Gebruik fallback instructie.`, 'warning', 2);
+                instruction = fallbackInstruction;
             }
             
-            // Update UI
             setButtonState('generateFeedbackBtn', true);
             showProgress(2, 25);
             showStatus('ChatGPT analyseert het gesprek...', 'success', 2);
@@ -886,7 +868,6 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
                 
                 showProgress(2, 50);
                 
-                // Make ChatGPT API call
                 const response = await fetch('https://api.openai.com/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -922,19 +903,16 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
                 
                 const feedback = result.choices[0].message.content;
                 
-                // Show results
                 document.getElementById('feedbackResult').value = feedback;
                 document.getElementById('feedbackSection').style.display = 'block';
                 
                 showProgress(2, 100);
                 showStatus('Feedback gegenereerd! Scroll naar beneden voor het resultaat.', 'success', 2);
                 
-                // Auto-resize textarea
                 autoResizeTextarea(document.getElementById('feedbackResult'));
                 
                 setTimeout(() => {
                     hideProgress(2);
-                    // Scroll to results
                     document.getElementById('feedbackSection').scrollIntoView({ 
                         behavior: 'smooth', 
                         block: 'start' 
@@ -951,11 +929,9 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
         }
         
         function newFeedback() {
-            // Reset feedback section
             document.getElementById('feedbackResult').value = '';
             document.getElementById('feedbackSection').style.display = 'none';
             
-            // Reset custom fields if needed
             const selectedType = document.getElementById('feedbackTypeSelect').value;
             if (selectedType === 'custom-text') {
                 document.getElementById('customInstruction').value = '';
@@ -963,10 +939,8 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
                 document.getElementById('customUrl').value = '';
             }
             
-            // Re-validate
             validateFeedbackGeneration();
             
-            // Scroll to analysis section
             document.getElementById('analysisSection').scrollIntoView({ 
                 behavior: 'smooth', 
                 block: 'start' 
@@ -974,18 +948,15 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
         }
         
         function restartTool() {
-            // Stop any active recording
             if (mediaRecorder && mediaRecorder.state === 'recording') {
                 stopRecording();
             }
             
-            // Clear recording timer
             if (recordingTimer) {
                 clearInterval(recordingTimer);
                 recordingTimer = null;
             }
             
-            // Reset all data
             audioData = null;
             recordingChunks = [];
             document.getElementById('audioFile').value = '';
@@ -995,38 +966,28 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
             document.getElementById('customInstruction').value = '';
             document.getElementById('customUrl').value = '';
             
-            // Reset feedback type to first option
             document.getElementById('feedbackTypeSelect').value = 'kandidaat-verleiden-en-intake';
             handleFeedbackTypeChange();
             
-            // Reset recording UI
             document.getElementById('recordingTimer').textContent = '00:00';
             document.getElementById('recordingStatus').textContent = 'Klaar om op te nemen';
             document.getElementById('startRecordBtn').disabled = false;
             document.getElementById('startRecordBtn').classList.remove('recording');
             document.getElementById('stopRecordBtn').disabled = true;
             
-            // Hide sections
             document.getElementById('transcriptionSection').style.display = 'none';
             document.getElementById('analysisSection').style.display = 'none';
             document.getElementById('feedbackSection').style.display = 'none';
             
-            // Reset progress and status
             hideProgress(1);
             hideProgress(2);
             document.getElementById('status1').style.display = 'none';
             document.getElementById('status2').style.display = 'none';
             
-            // Reset steps
             updateSteps(1);
-            
-            // Reset selections
             selectAudioMethod('upload');
-            
-            // Re-validate
             validateInputs();
             
-            // Scroll to top
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
         
@@ -1040,7 +1001,6 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
                 return;
             }
             
-            // Export 1: Transcriptie
             const transcriptBlob = new Blob([transcription], { type: 'text/plain;charset=utf-8' });
             const transcriptUrl = URL.createObjectURL(transcriptBlob);
             
@@ -1052,7 +1012,6 @@ Geef je gedetailleerde analyse en feedback volgens de bovenstaande instructies.`
             document.body.removeChild(transcriptLink);
             URL.revokeObjectURL(transcriptUrl);
             
-            // Export 2: Feedback Analyse (small delay to avoid browser blocking)
             setTimeout(() => {
                 const reportBlob = new Blob([report], { type: 'text/plain;charset=utf-8' });
                 const reportUrl = URL.createObjectURL(reportBlob);
