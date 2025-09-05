@@ -23,6 +23,18 @@
             text-align: center;
             margin-bottom: 30px;
         }
+        .model-info {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .model-info h3 {
+            margin: 0 0 10px 0;
+            color: #1565c0;
+        }
         .whatsapp-info {
             background: #dcf8c6;
             border: 2px solid #4caf50;
@@ -41,18 +53,6 @@
         }
         .whatsapp-info li {
             margin-bottom: 8px;
-        }
-        .model-info {
-            background: #e3f2fd;
-            border: 2px solid #2196f3;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-        .model-info h3 {
-            margin: 0 0 10px 0;
-            color: #1565c0;
         }
         .steps {
             display: flex;
@@ -150,6 +150,7 @@
             border-radius: 5px;
             display: none;
             font-weight: 500;
+            white-space: pre-line;
         }
         .success {
             background: #d4edda;
@@ -265,7 +266,7 @@
             text-align: center;
             margin: 15px 0;
             transition: all 0.3s ease;
-            display: none;
+            cursor: pointer;
         }
         .file-upload-area:hover {
             border-color: #007cba;
@@ -334,9 +335,9 @@
             </div>
 
             <!-- File Upload Area -->
-            <div class="file-upload-area" id="uploadArea" style="display: block;">
+            <div class="file-upload-area" id="uploadArea">
                 <input type="file" id="audioFile" accept="audio/*" style="display: none;">
-                <div onclick="document.getElementById('audioFile').click();" style="cursor: pointer;">
+                <div id="uploadContent">
                     <div style="font-size: 48px; color: #ddd; margin-bottom: 10px;">📁</div>
                     <div style="font-size: 16px; color: #666;">Klik hier of sleep een audio bestand</div>
                     <div style="font-size: 12px; color: #999; margin-top: 5px;">Ondersteund: MP3, WAV, M4A, OGG, WEBM, FLAC</div>
@@ -617,26 +618,68 @@ Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('App initializing...');
             loadSavedKeys();
             setupEventListeners();
             selectAudioMethod('upload');
             handleFeedbackTypeChange();
+            console.log('App initialized successfully');
         });
         
         function loadSavedKeys() {
-            const openaiKey = localStorage.getItem('openai_api_key');
-            if (openaiKey) document.getElementById('openaiKey').value = openaiKey;
+            try {
+                const openaiKey = localStorage.getItem('openai_api_key');
+                if (openaiKey) {
+                    document.getElementById('openaiKey').value = openaiKey;
+                    console.log('API key loaded from localStorage');
+                }
+            } catch (error) {
+                console.error('Cannot read localStorage:', error);
+            }
             validateInputs();
         }
         
+        function saveApiKey() {
+            const openaiKey = document.getElementById('openaiKey').value.trim();
+            if (openaiKey) {
+                try {
+                    localStorage.setItem('openai_api_key', openaiKey);
+                    console.log('API key saved to localStorage');
+                } catch (error) {
+                    console.error('Cannot write to localStorage:', error);
+                }
+            }
+        }
+        
         function setupEventListeners() {
-            // Input validation
-            document.getElementById('openaiKey').addEventListener('input', validateInputs);
+            console.log('Setting up event listeners...');
+            
+            // Input validation and API key saving
+            document.getElementById('openaiKey').addEventListener('input', function() {
+                validateInputs();
+                saveApiKey();
+            });
+            
             document.getElementById('audioFile').addEventListener('change', handleFileUpload);
             
             // Audio method selection
-            document.getElementById('uploadMethod').addEventListener('click', () => selectAudioMethod('upload'));
-            document.getElementById('recordMethod').addEventListener('click', () => selectAudioMethod('record'));
+            document.getElementById('uploadMethod').addEventListener('click', function() {
+                console.log('Upload method selected');
+                selectAudioMethod('upload');
+            });
+            
+            document.getElementById('recordMethod').addEventListener('click', function() {
+                console.log('Record method selected');
+                selectAudioMethod('record');
+            });
+            
+            // File upload area click handler
+            document.getElementById('uploadArea').addEventListener('click', function() {
+                if (audioMethod === 'upload') {
+                    console.log('Upload area clicked, triggering file selection');
+                    document.getElementById('audioFile').click();
+                }
+            });
             
             // Recording controls
             document.getElementById('startRecordBtn').addEventListener('click', startRecording);
@@ -665,9 +708,12 @@ Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback
             uploadArea.addEventListener('dragover', handleDragOver);
             uploadArea.addEventListener('dragleave', handleDragLeave);
             uploadArea.addEventListener('drop', handleDrop);
+            
+            console.log('Event listeners setup complete');
         }
         
         function selectAudioMethod(method) {
+            console.log('Selecting audio method:', method);
             audioMethod = method;
             
             // Update UI
@@ -675,8 +721,18 @@ Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback
             document.getElementById('recordMethod').classList.toggle('selected', method === 'record');
             
             // Show/hide appropriate areas
-            document.getElementById('uploadArea').style.display = method === 'upload' ? 'block' : 'none';
-            document.getElementById('recordingArea').style.display = method === 'record' ? 'block' : 'none';
+            const uploadArea = document.getElementById('uploadArea');
+            const recordingArea = document.getElementById('recordingArea');
+            
+            if (method === 'upload') {
+                uploadArea.style.display = 'block';
+                recordingArea.style.display = 'none';
+                console.log('Upload area shown, recording area hidden');
+            } else {
+                uploadArea.style.display = 'none';
+                recordingArea.style.display = 'block';
+                console.log('Recording area shown, upload area hidden');
+            }
             
             // Clear previous audio data when switching methods
             if (audioData) {
@@ -684,63 +740,24 @@ Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback
                 document.getElementById('audioPlayer').style.display = 'none';
                 document.getElementById('audioFile').value = '';
                 validateInputs();
+                console.log('Previous audio data cleared');
             }
         }
         
         function validateInputs() {
-            const openaiKey = document.getElementById('openaiKey').value;
+            const openaiKey = document.getElementById('openaiKey').value.trim();
             const hasAudio = audioData !== null;
-            document.getElementById('transcribeBtn').disabled = !openaiKey || !hasAudio;
+            const transcribeBtn = document.getElementById('transcribeBtn');
+            
+            transcribeBtn.disabled = !openaiKey || !hasAudio;
+            
+            console.log('Validation:', {
+                hasApiKey: !!openaiKey,
+                hasAudio: hasAudio,
+                transcribeBtnEnabled: !transcribeBtn.disabled
+            });
         }
         
         function validateFeedbackGeneration() {
             const transcription = document.getElementById('transcriptionResult').value.trim();
-            const selectedType = document.getElementById('feedbackTypeSelect').value;
-            
-            let hasInstruction = false;
-            
-            if (feedbackTypes[selectedType]) {
-                hasInstruction = true;
-            } else if (selectedType === 'custom-url') {
-                hasInstruction = document.getElementById('customUrl').value.trim() !== '';
-            } else if (selectedType === 'custom-text') {
-                hasInstruction = document.getElementById('customInstruction').value.trim() !== '';
-            }
-            
-            document.getElementById('generateFeedbackBtn').disabled = !transcription || !hasInstruction;
-        }
-        
-        function handleFeedbackTypeChange() {
-            const selectedType = document.getElementById('feedbackTypeSelect').value;
-            
-            // Hide all custom groups
-            document.getElementById('customUrlGroup').style.display = 'none';
-            document.getElementById('customTextGroup').style.display = 'none';
-            
-            // Show appropriate input based on selection
-            if (selectedType === 'custom-url') {
-                document.getElementById('customUrlGroup').style.display = 'block';
-            } else if (selectedType === 'custom-text') {
-                document.getElementById('customTextGroup').style.display = 'block';
-                
-                // Load saved custom instruction if available
-                const savedInstruction = localStorage.getItem('custom_instruction');
-                if (savedInstruction && !document.getElementById('customInstruction').value) {
-                    document.getElementById('customInstruction').value = savedInstruction;
-                }
-            }
-            
-            validateFeedbackGeneration();
-        }
-        
-        async function loadInstructionFromUrl(url) {
-            try {
-                showStatus('Laden van instructies...', 'success', 2);
-                
-                const response = await fetch(url);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const instruction = await response.text();
+            const selectedType = document.getElementById('fee
