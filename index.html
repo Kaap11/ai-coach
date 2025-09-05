@@ -150,7 +150,6 @@
             border-radius: 5px;
             display: none;
             font-weight: 500;
-            white-space: pre-line;
         }
         .success {
             background: #d4edda;
@@ -266,7 +265,7 @@
             text-align: center;
             margin: 15px 0;
             transition: all 0.3s ease;
-            cursor: pointer;
+            display: block;
         }
         .file-upload-area:hover {
             border-color: #007cba;
@@ -283,12 +282,12 @@
         <h1>KAAP11 Recruitment Transcriptie & Feedback Tool</h1>
         
         <div class="model-info">
-            <h3>🤖 Hybride AI Model Systeem</h3>
-            <strong>Automatische model selectie voor optimale kosten en kwaliteit:</strong>
+            <h3>🤖 Automatische Model Selectie</h3>
+            <strong>De tool kiest automatisch het beste AI model:</strong>
             <ul>
-                <li><strong>Korte gesprekken (&lt;6k tokens):</strong> GPT-3.5-turbo - Snel en kosteneffectief</li>
-                <li><strong>Lange gesprekken (6k-120k tokens):</strong> GPT-4-turbo - Krachtige diepgaande analyse</li>
-                <li><strong>Met fallback systeem:</strong> Automatische terugval bij rate limits</li>
+                <li><strong>Korte gesprekken:</strong> GPT-3.5-turbo (snel en kosteneffectief)</li>
+                <li><strong>Lange gesprekken:</strong> GPT-4-turbo (krachtige analyse)</li>
+                <li><strong>Met fallback systeem voor maximale betrouwbaarheid</strong></li>
             </ul>
         </div>
         
@@ -337,7 +336,7 @@
             <!-- File Upload Area -->
             <div class="file-upload-area" id="uploadArea">
                 <input type="file" id="audioFile" accept="audio/*" style="display: none;">
-                <div id="uploadContent">
+                <div onclick="document.getElementById('audioFile').click();" style="cursor: pointer;">
                     <div style="font-size: 48px; color: #ddd; margin-bottom: 10px;">📁</div>
                     <div style="font-size: 16px; color: #666;">Klik hier of sleep een audio bestand</div>
                     <div style="font-size: 12px; color: #999; margin-top: 5px;">Ondersteund: MP3, WAV, M4A, OGG, WEBM, FLAC</div>
@@ -441,22 +440,6 @@
         let recordingTimer = null;
         let recordingStartTime = 0;
         
-        // Model configuration for hybrid approach
-        const MODEL_CONFIG = {
-            'gpt-3.5-turbo': {
-                maxContextTokens: 16384,
-                maxOutputTokens: 2000,
-                costLevel: 'laag',
-                description: 'Snel en kosteneffectief'
-            },
-            'gpt-4-turbo': {
-                maxContextTokens: 128000,
-                maxOutputTokens: 4000,
-                costLevel: 'hoog',
-                description: 'Krachtige analyse voor complexe gesprekken'
-            }
-        };
-        
         // GitHub repository configuration
         const GITHUB_BASE_URL = 'https://raw.githubusercontent.com/kaap11/feedback-instructies/main/';
         
@@ -492,10 +475,9 @@ Voor elk geanalyseerd aspect:
 
 Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback te onderbouwen.`;
 
-        // Hybrid model selection functions
+        // TOKEN COUNTING AND MODEL SELECTION - NEW FUNCTIONALITY
         function estimateTokens(text) {
-            // Rough estimation: 1 token ≈ 4 characters for Dutch text
-            // Add 10% safety margin for actual tokenization differences
+            // Conservative estimation: 1 token ≈ 4 characters for Dutch text
             return Math.ceil((text.length / 4) * 1.1);
         }
         
@@ -504,182 +486,59 @@ Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback
             const instructionTokens = estimateTokens(instruction);
             const totalInputTokens = transcriptionTokens + instructionTokens;
             
-            // Add buffer for output tokens and safety margin
-            const gpt35Threshold = 6000; // Leave ~2000 tokens for output
-            const gpt4Threshold = 120000; // Leave ~8000 tokens for output
+            // Thresholds with safety margins
+            const gpt35Threshold = 6000; 
+            const gpt4Threshold = 120000;
             
             if (totalInputTokens < gpt35Threshold) {
                 return {
                     model: 'gpt-3.5-turbo',
-                    maxTokens: MODEL_CONFIG['gpt-3.5-turbo'].maxOutputTokens,
-                    costLevel: MODEL_CONFIG['gpt-3.5-turbo'].costLevel,
-                    description: MODEL_CONFIG['gpt-3.5-turbo'].description,
+                    maxTokens: 2000,
                     estimatedInputTokens: totalInputTokens,
-                    reasoning: 'Compact gesprek - optimaal voor snelle, kosteneffectieve analyse'
+                    reasoning: 'Compact gesprek - GPT-3.5 voor snelle, kosteneffectieve analyse'
                 };
             } else if (totalInputTokens < gpt4Threshold) {
                 return {
                     model: 'gpt-4-turbo',
-                    maxTokens: MODEL_CONFIG['gpt-4-turbo'].maxOutputTokens,
-                    costLevel: MODEL_CONFIG['gpt-4-turbo'].costLevel,
-                    description: MODEL_CONFIG['gpt-4-turbo'].description,
+                    maxTokens: 4000,
                     estimatedInputTokens: totalInputTokens,
-                    reasoning: 'Lang/complex gesprek - gebruikt krachtig model voor diepgaande analyse'
+                    reasoning: 'Lang gesprek - GPT-4 voor diepgaande analyse'
                 };
             } else {
-                throw new Error(`Gesprek te lang (${totalInputTokens.toLocaleString()} tokens). Maximum is ${gpt4Threshold.toLocaleString()} tokens. Overweeg het gesprek te splitsen in delen van maximaal 20-25 minuten.`);
-            }
-        }
-        
-        async function generateFeedbackWithFallback(modelConfig, prompt, openaiKey) {
-            const primaryModel = modelConfig.model;
-            let fallbackAttempted = false;
-            
-            try {
-                showStatus(`🤖 Gebruikt ${primaryModel} (${modelConfig.costLevel} kosten) - ${modelConfig.reasoning}`, 'success', 2);
-                
-                const response = await fetch('https://api.openai.com/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${openaiKey}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: primaryModel,
-                        messages: [
-                            { 
-                                role: 'user', 
-                                content: prompt 
-                            }
-                        ],
-                        max_tokens: modelConfig.maxTokens,
-                        temperature: 0.3
-                    })
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`${primaryModel} API Error:`, errorText);
-                    
-                    // Check if it's a context length error or rate limit
-                    if (response.status === 400 && errorText.includes('context_length_exceeded')) {
-                        throw new Error(`Context te lang voor ${primaryModel}. Probeer GPT-4-turbo of splits het gesprek.`);
-                    } else if (response.status === 429) {
-                        // Rate limit - try fallback if possible
-                        if (primaryModel === 'gpt-4-turbo' && modelConfig.estimatedInputTokens < 6000) {
-                            fallbackAttempted = true;
-                            showStatus('⚠️ GPT-4 rate limit bereikt, valt terug op GPT-3.5-turbo...', 'warning', 2);
-                            
-                            const fallbackResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-                                method: 'POST',
-                                headers: {
-                                    'Authorization': `Bearer ${openaiKey}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({
-                                    model: 'gpt-3.5-turbo',
-                                    messages: [{ role: 'user', content: prompt }],
-                                    max_tokens: 2000,
-                                    temperature: 0.3
-                                })
-                            });
-                            
-                            if (!fallbackResponse.ok) {
-                                const fallbackError = await fallbackResponse.text();
-                                throw new Error(`Beide modellen falen. ${primaryModel}: Rate limit. GPT-3.5: ${fallbackError}`);
-                            }
-                            
-                            return {
-                                response: fallbackResponse,
-                                modelUsed: 'gpt-3.5-turbo (fallback)',
-                                fallbackUsed: true
-                            };
-                        } else {
-                            throw new Error(`${primaryModel} rate limit bereikt. Probeer over enkele minuten opnieuw.`);
-                        }
-                    } else {
-                        throw new Error(`${primaryModel} API error (${response.status}): ${errorText}`);
-                    }
-                }
-                
-                return {
-                    response: response,
-                    modelUsed: primaryModel,
-                    fallbackUsed: false
-                };
-                
-            } catch (error) {
-                if (fallbackAttempted) {
-                    throw error;
-                }
-                throw new Error(`Model selectie fout: ${error.message}`);
+                throw new Error(`Gesprek te lang (${totalInputTokens.toLocaleString()} tokens). Maximum is ${gpt4Threshold.toLocaleString()} tokens. Overweeg het gesprek te splitsen.`);
             }
         }
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('App initializing...');
             loadSavedKeys();
             setupEventListeners();
             selectAudioMethod('upload');
             handleFeedbackTypeChange();
-            console.log('App initialized successfully');
         });
         
         function loadSavedKeys() {
-            try {
-                const openaiKey = localStorage.getItem('openai_api_key');
-                if (openaiKey) {
-                    document.getElementById('openaiKey').value = openaiKey;
-                    console.log('API key loaded from localStorage');
-                }
-            } catch (error) {
-                console.error('Cannot read localStorage:', error);
-            }
+            const openaiKey = localStorage.getItem('openai_api_key');
+            if (openaiKey) document.getElementById('openaiKey').value = openaiKey;
             validateInputs();
         }
         
-        function saveApiKey() {
-            const openaiKey = document.getElementById('openaiKey').value.trim();
-            if (openaiKey) {
-                try {
-                    localStorage.setItem('openai_api_key', openaiKey);
-                    console.log('API key saved to localStorage');
-                } catch (error) {
-                    console.error('Cannot write to localStorage:', error);
-                }
-            }
-        }
-        
         function setupEventListeners() {
-            console.log('Setting up event listeners...');
-            
-            // Input validation and API key saving
+            // Input validation with API key saving
             document.getElementById('openaiKey').addEventListener('input', function() {
                 validateInputs();
-                saveApiKey();
+                // Save API key on every change
+                const key = this.value.trim();
+                if (key) {
+                    localStorage.setItem('openai_api_key', key);
+                }
             });
             
             document.getElementById('audioFile').addEventListener('change', handleFileUpload);
             
             // Audio method selection
-            document.getElementById('uploadMethod').addEventListener('click', function() {
-                console.log('Upload method selected');
-                selectAudioMethod('upload');
-            });
-            
-            document.getElementById('recordMethod').addEventListener('click', function() {
-                console.log('Record method selected');
-                selectAudioMethod('record');
-            });
-            
-            // File upload area click handler
-            document.getElementById('uploadArea').addEventListener('click', function() {
-                if (audioMethod === 'upload') {
-                    console.log('Upload area clicked, triggering file selection');
-                    document.getElementById('audioFile').click();
-                }
-            });
+            document.getElementById('uploadMethod').addEventListener('click', () => selectAudioMethod('upload'));
+            document.getElementById('recordMethod').addEventListener('click', () => selectAudioMethod('record'));
             
             // Recording controls
             document.getElementById('startRecordBtn').addEventListener('click', startRecording);
@@ -708,12 +567,9 @@ Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback
             uploadArea.addEventListener('dragover', handleDragOver);
             uploadArea.addEventListener('dragleave', handleDragLeave);
             uploadArea.addEventListener('drop', handleDrop);
-            
-            console.log('Event listeners setup complete');
         }
         
         function selectAudioMethod(method) {
-            console.log('Selecting audio method:', method);
             audioMethod = method;
             
             // Update UI
@@ -721,18 +577,8 @@ Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback
             document.getElementById('recordMethod').classList.toggle('selected', method === 'record');
             
             // Show/hide appropriate areas
-            const uploadArea = document.getElementById('uploadArea');
-            const recordingArea = document.getElementById('recordingArea');
-            
-            if (method === 'upload') {
-                uploadArea.style.display = 'block';
-                recordingArea.style.display = 'none';
-                console.log('Upload area shown, recording area hidden');
-            } else {
-                uploadArea.style.display = 'none';
-                recordingArea.style.display = 'block';
-                console.log('Recording area shown, upload area hidden');
-            }
+            document.getElementById('uploadArea').style.display = method === 'upload' ? 'block' : 'none';
+            document.getElementById('recordingArea').style.display = method === 'record' ? 'block' : 'none';
             
             // Clear previous audio data when switching methods
             if (audioData) {
@@ -740,24 +586,182 @@ Geef altijd specifieke voorbeelden en citaten uit de transcriptie om je feedback
                 document.getElementById('audioPlayer').style.display = 'none';
                 document.getElementById('audioFile').value = '';
                 validateInputs();
-                console.log('Previous audio data cleared');
             }
         }
         
         function validateInputs() {
-            const openaiKey = document.getElementById('openaiKey').value.trim();
+            const openaiKey = document.getElementById('openaiKey').value;
             const hasAudio = audioData !== null;
-            const transcribeBtn = document.getElementById('transcribeBtn');
-            
-            transcribeBtn.disabled = !openaiKey || !hasAudio;
-            
-            console.log('Validation:', {
-                hasApiKey: !!openaiKey,
-                hasAudio: hasAudio,
-                transcribeBtnEnabled: !transcribeBtn.disabled
-            });
+            document.getElementById('transcribeBtn').disabled = !openaiKey || !hasAudio;
         }
         
         function validateFeedbackGeneration() {
             const transcription = document.getElementById('transcriptionResult').value.trim();
-            const selectedType = document.getElementById('fee
+            const selectedType = document.getElementById('feedbackTypeSelect').value;
+            
+            let hasInstruction = false;
+            
+            if (feedbackTypes[selectedType]) {
+                hasInstruction = true;
+            } else if (selectedType === 'custom-url') {
+                hasInstruction = document.getElementById('customUrl').value.trim() !== '';
+            } else if (selectedType === 'custom-text') {
+                hasInstruction = document.getElementById('customInstruction').value.trim() !== '';
+            }
+            
+            document.getElementById('generateFeedbackBtn').disabled = !transcription || !hasInstruction;
+        }
+        
+        function handleFeedbackTypeChange() {
+            const selectedType = document.getElementById('feedbackTypeSelect').value;
+            
+            // Hide all custom groups
+            document.getElementById('customUrlGroup').style.display = 'none';
+            document.getElementById('customTextGroup').style.display = 'none';
+            
+            // Show appropriate input based on selection
+            if (selectedType === 'custom-url') {
+                document.getElementById('customUrlGroup').style.display = 'block';
+            } else if (selectedType === 'custom-text') {
+                document.getElementById('customTextGroup').style.display = 'block';
+                
+                // Load saved custom instruction if available
+                const savedInstruction = localStorage.getItem('custom_instruction');
+                if (savedInstruction && !document.getElementById('customInstruction').value) {
+                    document.getElementById('customInstruction').value = savedInstruction;
+                }
+            }
+            
+            validateFeedbackGeneration();
+        }
+        
+        async function loadInstructionFromUrl(url) {
+            try {
+                showStatus('Laden van instructies...', 'success', 2);
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const instruction = await response.text();
+                
+                if (!instruction.trim()) {
+                    throw new Error('Leeg bestand ontvangen');
+                }
+                
+                return instruction.trim();
+                
+            } catch (error) {
+                console.error('Error loading instruction:', error);
+                throw new Error(`Kan instructies niet laden van ${url}: ${error.message}`);
+            }
+        }
+        
+        // File upload handlers
+        function handleDragOver(event) {
+            event.preventDefault();
+            document.getElementById('uploadArea').classList.add('dragover');
+        }
+        
+        function handleDragLeave(event) {
+            event.preventDefault();
+            document.getElementById('uploadArea').classList.remove('dragover');
+        }
+        
+        function handleDrop(event) {
+            event.preventDefault();
+            document.getElementById('uploadArea').classList.remove('dragover');
+            
+            const files = event.dataTransfer.files;
+            if (files.length > 0) {
+                const file = files[0];
+                const fileInput = document.getElementById('audioFile');
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInput.files = dataTransfer.files;
+                handleFileUpload({ target: fileInput });
+            }
+        }
+        
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                audioData = null;
+                validateInputs();
+                return;
+            }
+            
+            // Check file size (25MB limit)
+            if (file.size > 25 * 1024 * 1024) {
+                showStatus('Bestand te groot. Maximum 25MB toegestaan.', 'error', 1);
+                return;
+            }
+            
+            // Check file type
+            const extension = file.name.toLowerCase().split('.').pop();
+            const supportedFormats = ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'flac'];
+            
+            if (!supportedFormats.includes(extension)) {
+                showStatus('Niet ondersteund formaat. Gebruik: MP3, WAV, M4A, OGG, WEBM of FLAC.', 'error', 1);
+                return;
+            }
+            
+            audioData = file;
+            
+            // Show audio player
+            const audioPlayer = document.getElementById('audioPlayer');
+            audioPlayer.src = URL.createObjectURL(file);
+            audioPlayer.style.display = 'block';
+            
+            const sizeInMB = (file.size / 1024 / 1024).toFixed(1);
+            showStatus(`Audio geladen: ${file.name} (${sizeInMB}MB)`, 'success', 1);
+            
+            validateInputs();
+        }
+        
+        // Recording functions
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                mediaRecorder = new MediaRecorder(stream);
+                recordingChunks = [];
+                
+                mediaRecorder.ondataavailable = function(event) {
+                    if (event.data.size > 0) {
+                        recordingChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = function() {
+                    const audioBlob = new Blob(recordingChunks, { type: 'audio/webm' });
+                    
+                    const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '');
+                    audioData = new File([audioBlob], `opname_${timestamp}.webm`, { type: 'audio/webm' });
+                    
+                    const audioPlayer = document.getElementById('audioPlayer');
+                    audioPlayer.src = URL.createObjectURL(audioBlob);
+                    audioPlayer.style.display = 'block';
+                    
+                    const sizeInMB = (audioData.size / 1024 / 1024).toFixed(1);
+                    showStatus(`Opname voltooid! (${sizeInMB}MB)`, 'success', 1);
+                    
+                    stream.getTracks().forEach(track => track.stop());
+                    validateInputs();
+                };
+                
+                mediaRecorder.start();
+                recordingStartTime = Date.now();
+                
+                document.getElementById('startRecordBtn').disabled = true;
+                document.getElementById('startRecordBtn').classList.add('recording');
+                document.getElementById('stopRecordBtn').disabled = false;
+                document.getElementById('recordingStatus').textContent = '🔴 Opname actief...';
+                
+                recordingTimer = setInterval(updateRecordingTimer, 1000);
+                showStatus('Opname gestart! Spreek nu in je microfoon.', 'success', 1);
+                
+            } catch (error) {
+                console.error('Recording error:', error);
